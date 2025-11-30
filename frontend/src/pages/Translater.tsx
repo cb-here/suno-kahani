@@ -30,7 +30,7 @@ export default function Translater() {
     setOutput("");
 
     // eslint-disable-next-line no-misleading-character-class
-    const cleanedText = text.replace(/[^a-zA-Z0-9\u0900-\u097F\s]/g, "");
+    const cleanedText = mode !== "english" ? text.replace(/[^a-zA-Z0-9\u0900-\u097F\s]/g, ""): text;
 
     const endpoint = mode === "english" ? "/translate/english" : "/translate";
 
