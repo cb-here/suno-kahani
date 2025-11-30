@@ -8,7 +8,7 @@ import {
   VolumeX,
 } from "lucide-react";
 
-export default function CustomAudioPlayer({ chunks }) {
+export default function CustomAudioPlayer({ chunks }: any) {
   const audioRef = useRef<HTMLAudioElement>(null);
 
   const [isPlaying, setIsPlaying] = useState(false);
@@ -98,7 +98,7 @@ export default function CustomAudioPlayer({ chunks }) {
     );
   };
 
-  const changeVolume = (e) => {
+  const changeVolume = (e: any) => {
     const audio = audioRef.current;
     if (!audio) return;
 
