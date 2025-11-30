@@ -8,6 +8,7 @@ export default function Translater() {
   const [output, setOutput] = useState("");
   const [loading, setLoading] = useState(false);
   const [isCopied, setIsCopied] = useState(false);
+  const [mode, setMode] = useState("hinglish");
 
   const handleCopied = async () => {
     setIsCopied(false);
@@ -28,11 +29,16 @@ export default function Translater() {
     setLoading(true);
     setOutput("");
 
+    // eslint-disable-next-line no-misleading-character-class
+    const cleanedText = text.replace(/[^a-zA-Z0-9\u0900-\u097F\s]/g, "");
+
+    const endpoint = mode === "english" ? "/translate/english" : "/translate";
+
     try {
-      const res = await fetch("http://localhost:4000/translate", {
+      const res = await fetch(`${import.meta.env.VITE_API_URL}${endpoint}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: text }),
+        body: JSON.stringify({ text: cleanedText }),
       });
 
       const data = await res.json();
@@ -64,6 +70,23 @@ export default function Translater() {
             onChange={(e) => setText(e.target.value)}
             rows={8}
           />
+
+          <div className="mt-4">
+            <label className="block text-sm font-medium mb-1 text-gray-700 dark:text-gray-300">
+              Translation Mode
+            </label>
+
+            <select
+              value={mode}
+              onChange={(e) => setMode(e.target.value)}
+              className="w-full p-2 rounded-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800"
+            >
+              <option value="hinglish">
+                Hinglish → Hindi (Transliteration)
+              </option>
+              <option value="english">English → Hindi (Translation)</option>
+            </select>
+          </div>
 
           <Button
             onClick={handleTranslate}

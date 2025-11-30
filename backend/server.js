@@ -20,24 +20,39 @@ app.post("/start-tts", async (req, res) => {
     .map((s) => s.trim())
     .filter((s) => s.length > 0);
 
-  // Store client responses
   const clients = new Set();
 
   activeStreams.set(streamId, { sentences, voice, clients, index: 0 });
 
-  // Send stream ID to frontend
+  // Send ID
   res.json({ streamId });
 
   (async () => {
     for (let i = 0; i < sentences.length; i++) {
       try {
         const tts = new UniversalEdgeTTS(sentences[i], voice);
+
         const result = await tts.synthesize();
+
+        if (!result || !result.audio) {
+          console.log("Invalid result, skipping");
+          continue;
+        }
+
         const arrayBuffer = await result.audio.arrayBuffer();
+        const size = arrayBuffer.byteLength;
+
+        // REAL partial detection
+        if (size < 5000) {
+          console.log("Skipping tiny partial packet:", size);
+          continue;
+        }
+
         const buffer = Buffer.from(arrayBuffer);
         const base64Audio = buffer.toString("base64");
 
         const payload = JSON.stringify({
+          chunkId: `${streamId}-${i}`,
           index: i,
           total: sentences.length,
           text: sentences[i],
@@ -52,21 +67,20 @@ app.post("/start-tts", async (req, res) => {
           ...activeStreams.get(streamId),
           index: i + 1,
         });
-
-        await new Promise((r) => setTimeout(r, 400)); // natural pause
       } catch (err) {
-        console.error(err);
+        console.error("TTS error:", err);
       }
     }
 
+    // STREAM DONE
     for (const clientRes of clients) {
-      clientRes.write("event: done\ndata: finished\n\n");
+      clientRes.write(`event: done\ndata: finished\n\n`);
       clientRes.end();
     }
+
     activeStreams.delete(streamId);
   })();
 });
-
 // SSE endpoint
 app.get("/stream/:id", (req, res) => {
   const { id } = req.params;
@@ -83,6 +97,12 @@ app.get("/stream/:id", (req, res) => {
   });
   res.flushHeaders();
 
+  if (stream.clients.has(res)) {
+    console.log("Client already connected — ignoring duplicate");
+    res.end();
+    return;
+  }
+
   stream.clients.add(res);
 
   req.on("close", () => {
@@ -93,9 +113,20 @@ app.get("/stream/:id", (req, res) => {
   });
 
   if (stream.index > 0) {
-    res.write(`data: ${JSON.stringify({ resumeFrom: stream.index })}\n\n`);
+    res.write(`event: resume\ndata: ${stream.index}\n\n`);
   }
 });
+
+function chunkWords(line, size = 10) {
+  const words = line.split(/\s+/);
+  const chunks = [];
+
+  for (let i = 0; i < words.length; i += size) {
+    chunks.push(words.slice(i, i + size).join(" "));
+  }
+
+  return chunks;
+}
 
 app.post("/translate", async (req, res) => {
   try {
@@ -108,27 +139,30 @@ app.post("/translate", async (req, res) => {
     const finalOutput = [];
 
     for (const line of lines) {
-      const isHinglish = /^[a-zA-Z0-9\s,.'!?-]+$/.test(line);
+      const chunks = chunkWords(line, 10);
+      let roughHindi = "";
 
-      let hindi = "";
+      for (const ch of chunks) {
+        const url1 = `https://inputtools.google.com/request?itc=hi-t-i0-und&text=${encodeURIComponent(
+          ch
+        )}`;
+        const r1 = await fetch(url1);
+        const d1 = await r1.json();
 
-      if (isHinglish) {
-        const url = `https://inputtools.google.com/request?itc=hi-t-i0-und&text=${encodeURIComponent(
-          line
-        )}`;
-        const res2 = await fetch(url);
-        const data = await res2.json();
-        hindi = data?.[1]?.[0]?.[1]?.[0] || line;
-      } else {
-        const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=hi&dt=t&q=${encodeURIComponent(
-          line
-        )}`;
-        const res3 = await fetch(url);
-        const data = await res3.json();
-        hindi = data[0].map((t) => t[0]).join("");
+        const part = d1?.[1]?.[0]?.[1]?.[0] || ch;
+        roughHindi += part + " ";
       }
 
-      finalOutput.push(hindi);
+      const url2 = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=hi&dt=t&q=${encodeURIComponent(
+        roughHindi.trim()
+      )}`;
+
+      const r2 = await fetch(url2);
+      const d2 = await r2.json();
+
+      const final = d2[0].map((t) => t[0]).join("");
+
+      finalOutput.push(final.trim());
     }
 
     res.json({
@@ -138,6 +172,38 @@ app.post("/translate", async (req, res) => {
     });
   } catch (err) {
     console.error("Translation error:", err);
+    res.status(500).json({ error: "Translation error" });
+  }
+});
+
+app.post("/translate/english", async (req, res) => {
+  try {
+    let { text } = req.body;
+
+    if (!text?.trim()) {
+      return res.status(400).json({ error: "Text required" });
+    }
+
+    // optional: clean punctuation
+    text = text.replace(/[^a-zA-Z0-9\s]/g, "");
+
+    const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=hi&dt=t&q=${encodeURIComponent(
+      text
+    )}`;
+
+    const r = await fetch(url);
+    const d = await r.json();
+
+    const translated = d[0].map((t) => t[0]).join("");
+
+    res.json({
+      success: true,
+      source: "english",
+      original: text,
+      translated: translated.trim(),
+    });
+  } catch (err) {
+    console.error("English Translation error:", err);
     res.status(500).json({ error: "Translation error" });
   }
 });

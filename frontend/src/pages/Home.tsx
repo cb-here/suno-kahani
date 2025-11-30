@@ -1,105 +1,81 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import Button from "../components/form/Button";
 import TextArea from "../components/form/TextArea";
 import CustomAudioPlayer from "../components/CustomAudioPlayer";
 
 const VOICES = [
   { id: "hi-IN-MadhurNeural", name: "Madhur (Male – Deep)" },
-  { id: "en-IN-NeerjaNeural", name: "Neerja (Hinglish Female)" },
+  { id: "hi-IN-SwaraNeural", name: "Swara (Female – Natural)" },
 ];
 
 export default function Home() {
   const [text, setText] = useState("");
   const [selectedVoice, setSelectedVoice] = useState(VOICES[0].id);
   const [isGenerating, setIsGenerating] = useState(false);
-  const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const eventRef = useRef<EventSource | null>(null);
+
+  const [chunks, setChunks] = useState<string[]>([]);
 
   const handleGenerate = async () => {
     if (!text.trim()) return alert("Kahani daal bhai");
 
+    setChunks([]);
     setIsGenerating(true);
-    setAudioUrl(null);
-
-    const audioQueue: string[] = [];
-    let currentAudio: HTMLAudioElement | null = null;
-
-    const playNext = () => {
-      if (audioQueue.length === 0) {
-        setIsGenerating(false);
-        return;
-      }
-
-      const nextUrl = audioQueue.shift()!;
-      setAudioUrl(nextUrl);
-
-      currentAudio = new Audio(nextUrl);
-      currentAudio.onended = () => {
-        URL.revokeObjectURL(nextUrl);
-        playNext();
-      };
-
-      currentAudio.play().catch(() => {
-        playNext();
-      });
-    };
 
     try {
-      const startRes = await fetch("http://localhost:4000/start-tts", {
+      const res = await fetch(`${import.meta.env.VITE_API_URL}/start-tts`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          text: text.trim(),
-          voice: selectedVoice,
-        }),
+        body: JSON.stringify({ text, voice: selectedVoice }),
       });
 
-      const { streamId } = await startRes.json();
+      const { streamId } = await res.json();
 
-      const eventSource = new EventSource(
-        `http://localhost:4000/stream/${streamId}`
-      );
+      const es = new EventSource(`${import.meta.env.VITE_API_URL}/stream/${streamId}`);
+      eventRef.current = es;
 
-      eventSource.onmessage = (event) => {
+      es.onmessage = (event) => {
         if (event.data.includes("finished")) {
-          eventSource.close();
-          if (audioQueue.length === 0 && !currentAudio) {
-            setIsGenerating(false);
-          }
+          es.close();
+          setIsGenerating(false);
           return;
         }
 
         try {
           const data = JSON.parse(event.data);
-          if (data.audio) {
-            const binary = atob(data.audio);
-            const array = new Uint8Array(binary.length);
-            for (let i = 0; i < binary.length; i++) {
-              array[i] = binary.charCodeAt(i);
-            }
-            const blob = new Blob([array], { type: "audio/mpeg" });
-            const url = URL.createObjectURL(blob);
 
-            audioQueue.push(url);
+          if (!data.audio) return;
 
-            if (!currentAudio) {
-              playNext();
-            }
-          }
-        } catch (e) {
-          console.log("Ignore:", e);
+          const binary = atob(data.audio);
+          const arr = new Uint8Array(binary.length);
+          for (let i = 0; i < binary.length; i++) arr[i] = binary.charCodeAt(i);
+
+          const blob = new Blob([arr], { type: "audio/mpeg" });
+          const url = URL.createObjectURL(blob);
+
+          setChunks((prev) => [...prev, url]);
+        } catch {
+          console.error("Server is returning error");
         }
       };
 
-      eventSource.onerror = () => {
-        console.log("Stream band ho gaya");
-        eventSource.close();
+      es.onerror = () => {
+        es.close();
         setIsGenerating(false);
       };
     } catch (err) {
       console.error(err);
-      alert("Server nahi chal raha bhai");
+      alert("Server off hai bhai");
       setIsGenerating(false);
     }
+  };
+
+  const handleStop = () => {
+    if (eventRef.current) {
+      eventRef.current.close();
+      eventRef.current = null;
+    }
+    setIsGenerating(false);
   };
 
   return (
@@ -165,9 +141,18 @@ export default function Home() {
               </Button>
             </div>
           </div>
+          <Button
+            onClick={handleStop}
+            variant="danger"
+            size="md"
+            disabled={!isGenerating}
+            className="w-full sm:w-auto bg-red-500 hover:bg-red-600 text-white mt-6"
+          >
+            Stop
+          </Button>
         </div>
 
-        {audioUrl && <CustomAudioPlayer audioUrl={audioUrl} />}
+        {chunks?.length > 0 && <CustomAudioPlayer chunks={chunks} />}
 
         <div className="mt-12 grid grid-cols-1 md:grid-cols-3 gap-6">
           <div className="bg-white/70 dark:bg-gray-900/30 backdrop-blur-sm rounded-xl p-6 border border-gray-200 dark:border-gray-800/50 shadow-lg">

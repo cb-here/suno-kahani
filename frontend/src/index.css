@@ -23,14 +23,14 @@
   }
 }
 
-.slider::-webkit-slider-thumb {
+.slider-thumb::-webkit-slider-thumb {
   appearance: none;
-  width: 14px;
-  height: 14px;
+  width: 18px;
+  height: 18px;
+  background: #a855f7;
   border-radius: 50%;
-  background: white;
   cursor: pointer;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 0 20px rgba(168, 85, 247, 0.8);
 }
 
 .slider::-moz-range-thumb {
