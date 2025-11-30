@@ -184,9 +184,6 @@ app.post("/translate/english", async (req, res) => {
       return res.status(400).json({ error: "Text required" });
     }
 
-    // Optional cleanup
-    text = text.replace(/[^a-zA-Z0-9\s]/g, "");
-
     const lines = text.split("\n").filter(Boolean);
     const finalOutput = [];
 

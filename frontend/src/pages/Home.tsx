@@ -98,7 +98,7 @@ export default function Home() {
           </p>
         </div>
 
-        <div className="bg-white/70 dark:bg-gray-900/50 backdrop-blur-sm rounded-2xl p-8 border border-gray-200 dark:border-gray-800/50 shadow-xl dark:shadow-2xl">
+        <div className="bg-white/70 dark:bg-gray-900/50 backdrop-blur-sm rounded-2xl p-3 sm:p-8 border border-gray-200 dark:border-gray-800/50 shadow-xl dark:shadow-2xl">
           <div className="mb-6">
             <TextArea
               label="Enter your story or text"

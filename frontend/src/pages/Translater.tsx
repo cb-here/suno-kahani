@@ -62,7 +62,7 @@ export default function Translater() {
           </p>
         </div>
 
-        <div className="bg-white/70 dark:bg-gray-900/50 backdrop-blur-sm rounded-2xl p-8 border border-gray-200 dark:border-gray-800/50 shadow-xl">
+        <div className="bg-white/70 dark:bg-gray-900/50 backdrop-blur-sm rounded-2xl p-3 sm:p-8 border border-gray-200 dark:border-gray-800/50 shadow-xl">
           <TextArea
             label="Enter text to translate"
             placeholder="Type here..."

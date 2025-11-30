@@ -122,23 +122,36 @@ export default function CustomAudioPlayer({ chunks }: any) {
   };
 
   return (
-    <div className="mt-10 max-w-2xl mx-auto">
-      <div className="bg-gray-900/80 backdrop-blur-xl rounded-2xl border border-white/10 shadow-lg px-6 py-4 flex items-center gap-6">
+    <div className="mt-10 max-w-2xl mx-auto px-3">
+      <div
+        className="
+      bg-gray-900/80 backdrop-blur-xl rounded-2xl border border-white/10 shadow-lg 
+      px-4 py-4 
+      flex flex-col gap-6
+      sm:flex-row sm:items-center sm:gap-6
+    "
+      >
         {/* Left: Play Button */}
         <button
           onClick={togglePlay}
-          className="p-3 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full shadow-md hover:scale-110 transition"
+          className="
+        p-3 
+        bg-gradient-to-r from-purple-500 to-pink-500 
+        rounded-full shadow-md 
+        hover:scale-110 transition
+        sm:p-4
+      "
         >
           {isPlaying ? (
-            <Pause className="w-5 h-5 text-white" />
+            <Pause className="w-5 h-5 text-white sm:w-6 sm:h-6" />
           ) : (
-            <Play className="w-5 h-5 text-white" />
+            <Play className="w-5 h-5 text-white sm:w-6 sm:h-6" />
           )}
         </button>
 
         {/* Middle: Progress + Info */}
-        <div className="flex-1">
-          <div className="flex justify-between text-gray-400 text-xs mb-1">
+        <div className="flex-1 w-full">
+          <div className="flex justify-between text-gray-400 text-[10px] sm:text-xs mb-1">
             <span>
               Chunk {currentChunk + 1}/{chunks.length}
             </span>
@@ -157,33 +170,33 @@ export default function CustomAudioPlayer({ chunks }: any) {
           </div>
         </div>
 
-        {/* Right: Jump */}
-        <div className="flex items-center gap-3">
+        {/* Jump */}
+        <div className="flex items-center gap-3 justify-center sm:justify-start">
           <button
             onClick={() => skip(-10)}
-            className="p-2 bg-gray-800 rounded-full hover:bg-gray-700 transition"
+            className="p-2 bg-gray-800 rounded-full hover:bg-gray-700 transition sm:p-3"
           >
-            <SkipBack className="w-4 h-4 text-white" />
+            <SkipBack className="w-4 h-4 text-white sm:w-5 sm:h-5" />
           </button>
 
           <button
             onClick={() => skip(10)}
-            className="p-2 bg-gray-800 rounded-full hover:bg-gray-700 transition"
+            className="p-2 bg-gray-800 rounded-full hover:bg-gray-700 transition sm:p-3"
           >
-            <SkipForward className="w-4 h-4 text-white" />
+            <SkipForward className="w-4 h-4 text-white sm:w-5 sm:h-5" />
           </button>
         </div>
 
         {/* Volume */}
-        <div className="flex items-center gap-2 ml-4">
+        <div className="flex items-center gap-2 justify-center sm:ml-4">
           <button
             onClick={toggleMute}
-            className="p-2 bg-gray-800 rounded-full hover:bg-gray-700 transition"
+            className="p-2 bg-gray-800 rounded-full hover:bg-gray-700 transition sm:p-3"
           >
             {isMuted ? (
-              <VolumeX className="w-4 h-4 text-white" />
+              <VolumeX className="w-4 h-4 text-white sm:w-5 sm:h-5" />
             ) : (
-              <Volume2 className="w-4 h-4 text-white" />
+              <Volume2 className="w-4 h-4 text-white sm:w-5 sm:h-5" />
             )}
           </button>
 
@@ -194,7 +207,7 @@ export default function CustomAudioPlayer({ chunks }: any) {
             step="0.01"
             value={isMuted ? 0 : volume}
             onChange={changeVolume}
-            className="w-20 accent-purple-500"
+            className="w-20 sm:w-24 accent-purple-500"
           />
         </div>
 
