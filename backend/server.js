@@ -184,23 +184,36 @@ app.post("/translate/english", async (req, res) => {
       return res.status(400).json({ error: "Text required" });
     }
 
-    // optional: clean punctuation
+    // Optional cleanup
     text = text.replace(/[^a-zA-Z0-9\s]/g, "");
 
-    const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=hi&dt=t&q=${encodeURIComponent(
-      text
-    )}`;
+    const lines = text.split("\n").filter(Boolean);
+    const finalOutput = [];
 
-    const r = await fetch(url);
-    const d = await r.json();
+    for (const line of lines) {
+      const chunks = chunkWords(line, 10);
+      let hindiLine = "";
 
-    const translated = d[0].map((t) => t[0]).join("");
+      for (const ch of chunks) {
+        const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=hi&dt=t&q=${encodeURIComponent(
+          ch
+        )}`;
+
+        const r = await fetch(url);
+        const d = await r.json();
+
+        const part = d[0].map((t) => t[0]).join("");
+        hindiLine += part + " ";
+      }
+
+      finalOutput.push(hindiLine.trim());
+    }
 
     res.json({
       success: true,
       source: "english",
       original: text,
-      translated: translated.trim(),
+      translated: finalOutput.join("\n"),
     });
   } catch (err) {
     console.error("English Translation error:", err);
