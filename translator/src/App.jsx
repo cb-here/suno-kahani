@@ -25,20 +25,21 @@ export default function App() {
   }, []);
 
   const handleCopy = async () => {
-    const node = document.querySelector("#translated_output");
-    if (!node) return;
+  const node = document.querySelector("#translated_output");
+  if (!node) return;
 
-    const finalText = node.innerText;
+  const finalText = node.textContent;  // <-- FIX
 
-    try {
-      await navigator.clipboard.writeText(finalText);
-      setIsCopied(true);
-    } catch (err) {
-      console.log(err);
-    } finally {
-      setTimeout(() => setIsCopied(false), 1500);
-    }
-  };
+  try {
+    await navigator.clipboard.writeText(finalText);
+    setIsCopied(true);
+  } catch (err) {
+    console.log(err);
+  } finally {
+    setTimeout(() => setIsCopied(false), 1500);
+  }
+};
+
 
   // Translate using widget
   const handleTranslate = () => {
