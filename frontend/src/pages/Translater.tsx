@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Button from "../components/form/Button";
 import TextArea from "../components/form/TextArea";
 
@@ -8,115 +8,118 @@ export default function Translater() {
   const [output, setOutput] = useState("");
   const [loading, setLoading] = useState(false);
   const [isCopied, setIsCopied] = useState(false);
-  const [mode, setMode] = useState("hinglish");
+
+  // Google Widget Init
+  const googleTranslateElementInit = () => {
+    new window.google.translate.TranslateElement(
+      {
+        pageLanguage: "en",
+        autoDisplay: false,
+      },
+      "google_translate_element"
+    );
+  };
+
+  useEffect(() => {
+    const addScript = document.createElement("script");
+    addScript.src =
+      "//translate.google.com/translate_a/element.js?cb=googleTranslateElementInit";
+    document.body.appendChild(addScript);
+
+    window.googleTranslateElementInit = googleTranslateElementInit;
+  }, []);
 
   const handleCopied = async () => {
-    setIsCopied(false);
+    const translatedNode = document.querySelector("#translated_output");
+
+    if (!translatedNode) return;
+
+    const finalText = translatedNode.innerText;
+
     try {
-      await navigator.clipboard.writeText(output);
+      await navigator.clipboard.writeText(finalText);
       setIsCopied(true);
     } catch (err) {
       console.log(err);
     } finally {
-      setTimeout(() => {
-        setIsCopied(false);
-      }, 2000);
+      setTimeout(() => setIsCopied(false), 2000);
     }
   };
 
-  const handleTranslate = async () => {
+  const handleTranslate = () => {
     if (!text.trim()) return;
+
     setLoading(true);
-    setOutput("");
 
-    // eslint-disable-next-line no-misleading-character-class
-    const cleanedText = mode !== "english" ? text.replace(/[^a-zA-Z0-9\u0900-\u097F\s]/g, ""): text;
+    setTimeout(() => {
+      setOutput(text);
 
-    const endpoint = mode === "english" ? "/translate/english" : "/translate";
+      setTimeout(() => {
+        const body = document.querySelector("body");
+        const event = document.createEvent("HTMLEvents");
+        event.initEvent("DOMNodeInserted", true, true);
+        body.dispatchEvent(event);
+      }, 50);
 
-    try {
-      const res = await fetch(`${import.meta.env.VITE_API_URL}${endpoint}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: cleanedText }),
-      });
-
-      const data = await res.json();
-      setOutput(data.translated || "Error ho gaya");
-    } catch {
-      setOutput("Server off hai kya?");
-    } finally {
       setLoading(false);
-    }
+    }, 300);
   };
 
   return (
-    <div className="min-h-screen py-12 px-2 bg-linear-to-br from-white via-gray-50 to-gray-100 dark:from-[#181515] dark:via-[#0f0d0d] dark:to-[#181515]">
-      <div className="relative z-10 max-w-4xl mx-auto">
-        <div className="mb-12 text-center">
-          <h1 className="text-5xl font-black mb-4 bg-linear-to-r from-purple-400 via-pink-400 to-purple-400 bg-clip-text text-transparent">
-            Hindi Translator
-          </h1>
-          <p className="text-gray-600 dark:text-gray-400 text-lg">
-            Convert any text to Devanagari Hindi
-          </p>
-        </div>
+    <div className="min-h-screen bg-gray-100 dark:bg-gray-900 flex items-center justify-center py-6 px-3 sm:px-6 md:px-10">
+      <div className="w-full max-w-3xl bg-white dark:bg-gray-800 shadow-xl rounded-xl p-4 sm:p-6 md:p-8 space-y-6">
+        <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-gray-800 dark:text-gray-200 text-center">
+          React Google Widget Translator
+        </h1>
 
-        <div className="bg-white/70 dark:bg-gray-900/50 backdrop-blur-sm rounded-2xl p-3 sm:p-8 border border-gray-200 dark:border-gray-800/50 shadow-xl">
-          <TextArea
-            label="Enter text to translate"
-            placeholder="Type here..."
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            rows={8}
-          />
+        {/* Widget Dropdown */}
+        <div
+          id="google_translate_element"
+          className="border border-gray-300 dark:border-gray-700 rounded-md p-2 sm:p-3 bg-gray-50 dark:bg-gray-700"
+        ></div>
 
-          <div className="mt-4">
-            <label className="block text-sm font-medium mb-1 text-gray-700 dark:text-gray-300">
-              Translation Mode
-            </label>
+        <TextArea
+          placeholder="Type text here..."
+          value={text}
+          rows={8}
+          onChange={(e) => setText(e.target.value)}
+          className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-gray-200 p-3 sm:p-4 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
+        />
 
-            <select
-              value={mode}
-              onChange={(e) => setMode(e.target.value)}
-              className="w-full p-2 rounded-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800"
-            >
-              <option value="hinglish">
-                Hinglish → Hindi (Transliteration)
-              </option>
-              <option value="english">English → Hindi (Translation)</option>
-            </select>
-          </div>
-
-          <Button
-            onClick={handleTranslate}
-            variant="primary"
-            size="md"
-            isLoading={loading}
-            disabled={!text.trim()}
-            className="w-full mt-4"
-          >
-            Translate
-          </Button>
-        </div>
+        <Button
+          onClick={handleTranslate}
+          disabled={!text.trim()}
+          className={`w-full py-2.5 sm:py-3 rounded-lg font-semibold transition text-sm sm:text-base
+          ${
+            !text.trim()
+              ? "bg-gray-400 text-gray-200 cursor-not-allowed"
+              : "bg-blue-600 hover:bg-blue-700 text-white"
+          }
+        `}
+        >
+          {loading ? "Translating..." : "Translate"}
+        </Button>
 
         {output && (
-          <div className="mt-8 bg-white/70 dark:bg-gray-900/40 border border-gray-200 dark:border-gray-800/50 shadow-lg p-6 rounded-xl relative">
+          <div className="relative border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 rounded-xl p-4 sm:p-6">
             <button
               onClick={handleCopied}
-              disabled={isCopied}
-              className="absolute top-4 right-4 px-3 py-1.5 text-sm bg-purple-600 hover:bg-purple-700 text-white rounded-md transition"
+              className="absolute top-3 right-3 sm:top-4 sm:right-4 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 px-2 sm:px-3 py-1 rounded-md text-xs sm:text-sm hover:bg-gray-300 dark:hover:bg-gray-600 transition"
             >
               {isCopied ? "Copied!" : "Copy"}
             </button>
 
-            <h3 className="font-bold text-xl mb-3 text-gray-900 dark:text-white">
-              Hindi (Devanagari)
+            <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-200 mb-2 sm:mb-3">
+              Translated Output
             </h3>
 
-            <p className="text-gray-700 dark:text-gray-300 leading-relaxed whitespace-pre-line">
+            <div
+              id="translated_output"
+              style={{ whiteSpace: "pre-wrap" }}
+              className="text-gray-800 dark:text-gray-200 whitespace-pre-wrap leading-relaxed text-sm sm:text-base"
+            >
               {output}
-            </p>
+            </div>
           </div>
         )}
       </div>

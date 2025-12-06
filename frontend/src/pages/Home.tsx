@@ -2,70 +2,96 @@ import { useRef, useState } from "react";
 import Button from "../components/form/Button";
 import TextArea from "../components/form/TextArea";
 import CustomAudioPlayer from "../components/CustomAudioPlayer";
-
-const VOICES = [
-  { id: "hi-IN-MadhurNeural", name: "Madhur (Male – Deep)" },
-  { id: "hi-IN-SwaraNeural", name: "Swara (Female – Natural)" },
-];
+import { Download } from "lucide-react";
 
 export default function Home() {
   const [text, setText] = useState("");
-  const [selectedVoice, setSelectedVoice] = useState(VOICES[0].id);
+  const [voice, setVoice] = useState("pratham");
   const [isGenerating, setIsGenerating] = useState(false);
-  const eventRef = useRef<EventSource | null>(null);
-
+  const [isDownloading, setIsDownloading] = useState(false);
   const [chunks, setChunks] = useState<string[]>([]);
+  const eventRef = useRef<EventSource | null>(null);
 
   const handleGenerate = async () => {
     if (!text.trim()) return alert("Kahani daal bhai");
 
-    setChunks([]);
     setIsGenerating(true);
+    setChunks([]);
 
     try {
-      const res = await fetch(`${import.meta.env.VITE_API_URL}/start-tts`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text, voice: selectedVoice }),
-      });
-
-      const { streamId } = await res.json();
-
-      const es = new EventSource(`${import.meta.env.VITE_API_URL}/stream/${streamId}`);
-      eventRef.current = es;
-
-      es.onmessage = (event) => {
-        if (event.data.includes("finished")) {
-          es.close();
-          setIsGenerating(false);
-          return;
+      const response = await fetch(
+        `${import.meta.env.VITE_API_URL}/tts/stream`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text, voice }),
         }
+      );
 
-        try {
-          const data = JSON.parse(event.data);
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
 
-          if (!data.audio) return;
-
-          const binary = atob(data.audio);
-          const arr = new Uint8Array(binary.length);
-          for (let i = 0; i < binary.length; i++) arr[i] = binary.charCodeAt(i);
-
-          const blob = new Blob([arr], { type: "audio/mpeg" });
-          const url = URL.createObjectURL(blob);
-
-          setChunks((prev) => [...prev, url]);
-        } catch {
-          console.error("Server is returning error");
-        }
-      };
-
-      es.onerror = () => {
-        es.close();
+      if (!response.body) {
+        alert("Streaming not supported");
         setIsGenerating(false);
-      };
-    } catch (err) {
-      console.error(err);
-      alert("Server off hai bhai");
+        return;
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      const audioChunks: string[] = [];
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          if (line.startsWith("data: ")) {
+            try {
+              const data = JSON.parse(line.slice(6));
+
+              if (data.error) {
+                console.error("Server error:", data.error);
+                alert(`Error: ${data.error}`);
+                continue;
+              }
+
+              if (data.done) {
+                setIsGenerating(false);
+                continue;
+              }
+
+              if (data.audio) {
+                const binary = atob(data.audio);
+                const arr = new Uint8Array(binary.length);
+                for (let i = 0; i < binary.length; i++) {
+                  arr[i] = binary.charCodeAt(i);
+                }
+
+                const blob = new Blob([arr], { type: "audio/wav" });
+                const url = URL.createObjectURL(blob);
+
+                audioChunks.push(url);
+                setChunks([...audioChunks]);
+              }
+            } catch (parseErr) {
+              console.error("Failed to parse SSE data:", line, parseErr);
+            }
+          }
+        }
+      }
+
+      setIsGenerating(false);
+    } catch (err: any) {
+      console.error("Fetch error:", err);
+      alert(`Error: ${err.message}`);
       setIsGenerating(false);
     }
   };
@@ -76,6 +102,42 @@ export default function Home() {
       eventRef.current = null;
     }
     setIsGenerating(false);
+  };
+
+  const handleDownload = async () => {
+    if (!text.trim()) return alert("Kahani daal bhai");
+
+    setIsDownloading(true);
+
+    try {
+      const response = await fetch(
+        `${import.meta.env.VITE_API_URL}/tts/download`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text, voice }),
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`Download failed: ${response.status}`);
+      }
+
+      const blob = await response.blob();
+      const downloadUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = downloadUrl;
+      a.download = `suno-kahani-${Date.now()}.wav`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(downloadUrl);
+    } catch (error: any) {
+      console.error("Download error:", error);
+      alert(`Download failed: ${error.message}`);
+    } finally {
+      setIsDownloading(false);
+    }
   };
 
   return (
@@ -110,24 +172,22 @@ export default function Home() {
             />
           </div>
 
-          <div className="flex flex-col sm:flex-row gap-4 items-center!">
-            <div className="flex-1 w-full">
-              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                Select Voice
-              </label>
-              <select
-                value={selectedVoice}
-                onChange={(e) => setSelectedVoice(e.target.value)}
-                className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-700 rounded-lg focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/30 transition-all duration-300 hover:border-gray-400 dark:hover:border-gray-600 cursor-pointer"
-              >
-                {VOICES.map((voice) => (
-                  <option key={voice.id} value={voice.id}>
-                    {voice.name}
-                  </option>
-                ))}
-              </select>
-            </div>
+          <div className="mb-6">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Select Voice
+            </label>
+            <select
+              value={voice}
+              onChange={(e) => setVoice(e.target.value)}
+              className="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
+            >
+              <option value="pratham">Pratham</option>
+              <option value="rohan">Rohan</option>
+              <option value="priyamvada">Priyamvada</option>
+            </select>
+          </div>
 
+          <div className="flex flex-col sm:flex-row gap-4 items-center!">
             <div className="w-full sm:w-auto mt-6">
               <Button
                 onClick={handleGenerate}
@@ -140,16 +200,34 @@ export default function Home() {
                 Generate
               </Button>
             </div>
+            <Button
+              onClick={handleStop}
+              variant="danger"
+              size="md"
+              disabled={!isGenerating}
+              className="w-full sm:w-auto bg-red-500 hover:bg-red-600 text-white mt-6"
+            >
+              Stop
+            </Button>
+            <Button
+              onClick={handleDownload}
+              size="md"
+              disabled={!text.trim() || isDownloading}
+              className="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-700 text-white mt-6 flex items-center justify-center gap-2"
+            >
+              {isDownloading ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  <span>Downloading...</span>
+                </>
+              ) : (
+                <>
+                  <Download className="w-4 h-4" />
+                  <span>Download</span>
+                </>
+              )}
+            </Button>
           </div>
-          <Button
-            onClick={handleStop}
-            variant="danger"
-            size="md"
-            disabled={!isGenerating}
-            className="w-full sm:w-auto bg-red-500 hover:bg-red-600 text-white mt-6"
-          >
-            Stop
-          </Button>
         </div>
 
         {chunks?.length > 0 && <CustomAudioPlayer chunks={chunks} />}
@@ -158,10 +236,10 @@ export default function Home() {
           <div className="bg-white/70 dark:bg-gray-900/30 backdrop-blur-sm rounded-xl p-6 border border-gray-200 dark:border-gray-800/50 shadow-lg">
             <div className="text-3xl mb-2">🎙️</div>
             <h3 className="text-gray-900 dark:text-white font-semibold mb-2">
-              Multiple Voices
+              Natural Narration
             </h3>
             <p className="text-gray-600 dark:text-gray-400 text-sm">
-              Choose from diverse voice options to match your story's mood
+              Professionally tuned Piper voice for story narration
             </p>
           </div>
 
@@ -181,7 +259,7 @@ export default function Home() {
               AI Powered
             </h3>
             <p className="text-gray-600 dark:text-gray-400 text-sm">
-              Cutting-edge technology for natural-sounding audio
+              Smooth, expressive narration using Piper TTS
             </p>
           </div>
         </div>

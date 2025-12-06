@@ -16,11 +16,16 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
+
 @media (prefers-color-scheme: light) {
   :root {
     color: #213547;
     background-color: #ece4e4;
   }
+}
+
+body {
+  top: 0px !important;
 }
 
 .slider-thumb::-webkit-slider-thumb {
@@ -49,4 +54,12 @@
 
 .slider::-moz-range-thumb:hover {
   transform: scale(1.2);
+}
+
+.VIpgJd-ZVi9od-ORHb-OEVmcd {
+  display: none !important;
+}
+
+.VIpgJd-ZVi9od-l4eHX-hSRGPd {
+  display: none !important;
 }
