@@ -1,16 +1,33 @@
 import { useRef, useState } from "react";
-import Button from "../components/form/Button";
 import TextArea from "../components/form/TextArea";
+import Button from "../components/form/Button";
 import CustomAudioPlayer from "../components/CustomAudioPlayer";
-import { Download } from "lucide-react";
 
 export default function Home() {
   const [text, setText] = useState("");
+  const [language, setLanguage] = useState("hindi");
   const [voice, setVoice] = useState("pratham");
   const [isGenerating, setIsGenerating] = useState(false);
-  const [isDownloading, setIsDownloading] = useState(false);
-  const [chunks, setChunks] = useState<string[]>([]);
-  const eventRef = useRef<EventSource | null>(null);
+  const [chunks, setChunks] = useState<any>([]);
+  const eventRef = useRef<any>(null);
+
+  const voiceOptions: any = {
+    hindi: [
+      { value: "pratham", label: "Pratham" },
+      { value: "rohan", label: "Rohan" },
+      { value: "priyamvada", label: "Priyamvada" },
+    ],
+    english: [
+      { value: "ryan", label: "Ryan" },
+      { value: "kristin", label: "Kristin" },
+    ],
+  };
+
+  // Handle language change and reset voice to first option
+  const handleLanguageChange = (newLanguage: any) => {
+    setLanguage(newLanguage);
+    setVoice(voiceOptions[newLanguage][0].value);
+  };
 
   const handleGenerate = async () => {
     if (!text.trim()) return alert("Kahani daal bhai");
@@ -25,7 +42,7 @@ export default function Home() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ text, voice }),
-        }
+        },
       );
 
       if (!response.ok) {
@@ -40,7 +57,7 @@ export default function Home() {
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
-      const audioChunks: string[] = [];
+      const audioChunks = [];
       let buffer = "";
 
       while (true) {
@@ -104,44 +121,8 @@ export default function Home() {
     setIsGenerating(false);
   };
 
-  const handleDownload = async () => {
-    if (!text.trim()) return alert("Kahani daal bhai");
-
-    setIsDownloading(true);
-
-    try {
-      const response = await fetch(
-        `${import.meta.env.VITE_API_URL}/tts/download`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text, voice }),
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error(`Download failed: ${response.status}`);
-      }
-
-      const blob = await response.blob();
-      const downloadUrl = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = downloadUrl;
-      a.download = `suno-kahani-${Date.now()}.wav`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(downloadUrl);
-    } catch (error: any) {
-      console.error("Download error:", error);
-      alert(`Download failed: ${error.message}`);
-    } finally {
-      setIsDownloading(false);
-    }
-  };
-
   return (
-    <div className="min-h-screen py-12 px-2 bg-linear-to-br from-white via-gray-50 to-gray-100 dark:from-[#181515] dark:via-[#0f0d0d] dark:to-[#181515]">
+    <div className="min-h-screen py-12 px-2 bg-gradient-to-br from-white via-gray-50 to-gray-100 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900">
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div className="absolute top-40 left-20 w-96 h-96 bg-purple-500/10 rounded-full blur-3xl animate-pulse"></div>
         <div
@@ -152,7 +133,7 @@ export default function Home() {
 
       <div className="relative z-10 max-w-4xl mx-auto">
         <div className="mb-12 text-center">
-          <h1 className="text-5xl font-black mb-4 bg-linear-to-r from-purple-400 via-pink-400 to-purple-400 bg-clip-text text-transparent">
+          <h1 className="text-5xl font-black mb-4 bg-gradient-to-r from-purple-400 via-pink-400 to-purple-400 bg-clip-text text-transparent">
             Suno Kahani
           </h1>
           <p className="text-gray-600 dark:text-gray-400 text-lg">
@@ -173,6 +154,32 @@ export default function Home() {
           </div>
 
           <div className="mb-6">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
+              Select Language
+            </label>
+            <div className="flex gap-4 mb-6">
+              <button
+                onClick={() => handleLanguageChange("hindi")}
+                className={`flex-1 px-6 py-3 rounded-lg font-semibold transition-all ${
+                  language === "hindi"
+                    ? "bg-purple-600 text-white shadow-lg scale-105"
+                    : "bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600"
+                }`}
+              >
+                Hindi
+              </button>
+              <button
+                onClick={() => handleLanguageChange("english")}
+                className={`flex-1 px-6 py-3 rounded-lg font-semibold transition-all ${
+                  language === "english"
+                    ? "bg-purple-600 text-white shadow-lg scale-105"
+                    : "bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600"
+                }`}
+              >
+                English
+              </button>
+            </div>
+
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
               Select Voice
             </label>
@@ -181,51 +188,33 @@ export default function Home() {
               onChange={(e) => setVoice(e.target.value)}
               className="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
             >
-              <option value="pratham">Pratham</option>
-              <option value="rohan">Rohan</option>
-              <option value="priyamvada">Priyamvada</option>
+              {voiceOptions[language].map((option: any) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
             </select>
           </div>
 
-          <div className="flex flex-col sm:flex-row gap-4 items-center!">
-            <div className="w-full sm:w-auto mt-6">
-              <Button
-                onClick={handleGenerate}
-                variant="primary"
-                size="md"
-                isLoading={isGenerating}
-                disabled={!text.trim()}
-                className="w-full"
-              >
-                Generate
-              </Button>
-            </div>
+          <div className="flex flex-col sm:flex-row gap-4">
+            <Button
+              onClick={handleGenerate}
+              variant="primary"
+              size="md"
+              isLoading={isGenerating}
+              disabled={!text.trim()}
+              className="w-full sm:w-auto"
+            >
+              Generate
+            </Button>
             <Button
               onClick={handleStop}
               variant="danger"
               size="md"
               disabled={!isGenerating}
-              className="w-full sm:w-auto bg-red-500 hover:bg-red-600 text-white mt-6"
+              className="w-full sm:w-auto"
             >
               Stop
-            </Button>
-            <Button
-              onClick={handleDownload}
-              size="md"
-              disabled={!text.trim() || isDownloading}
-              className="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-700 text-white mt-6 flex items-center justify-center gap-2"
-            >
-              {isDownloading ? (
-                <>
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  <span>Downloading...</span>
-                </>
-              ) : (
-                <>
-                  <Download className="w-4 h-4" />
-                  <span>Download</span>
-                </>
-              )}
             </Button>
           </div>
         </div>

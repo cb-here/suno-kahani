@@ -1,223 +1,211 @@
+// server.js (CommonJS)
+
 const express = require("express");
 const cors = require("cors");
-const { UniversalEdgeTTS } = require("edge-tts-universal");
-const { v4: uuidv4 } = require("uuid");
+const fs = require("fs");
+const path = require("path");
+const { WorkerPool } = require("./pool.js");
 
 const app = express();
 app.use(cors());
-app.use(express.json({ limit: "50mb" }));
+app.use(express.json({ limit: "100mb" }));
 
-// In-memory store for active streams
-const activeStreams = new Map();
+console.log("Using __dirname:", __dirname);
 
-app.post("/start-tts", async (req, res) => {
-  const { text, voice = "hi-IN-MadhurNeural" } = req.body;
-  if (!text) return res.status(400).json({ error: "Text bhej bhai" });
+// Paths
+const PIPER_PATH = path.join(__dirname, "piper", "piper.exe");
+const TMP_DIR = path.join(__dirname, "tmp");
+if (!fs.existsSync(TMP_DIR)) fs.mkdirSync(TMP_DIR);
 
-  const streamId = uuidv4();
-  const sentences = text
-    .split(/(?<=[.!?।])\s+/)
-    .map((s) => s.trim())
-    .filter((s) => s.length > 0);
-
-  const clients = new Set();
-
-  activeStreams.set(streamId, { sentences, voice, clients, index: 0 });
-
-  // Send ID
-  res.json({ streamId });
-
-  (async () => {
-    for (let i = 0; i < sentences.length; i++) {
-      try {
-        const tts = new UniversalEdgeTTS(sentences[i], voice);
-
-        const result = await tts.synthesize();
-
-        if (!result || !result.audio) {
-          console.log("Invalid result, skipping");
-          continue;
-        }
-
-        const arrayBuffer = await result.audio.arrayBuffer();
-        const size = arrayBuffer.byteLength;
-
-        // REAL partial detection
-        if (size < 5000) {
-          console.log("Skipping tiny partial packet:", size);
-          continue;
-        }
-
-        const buffer = Buffer.from(arrayBuffer);
-        const base64Audio = buffer.toString("base64");
-
-        const payload = JSON.stringify({
-          chunkId: `${streamId}-${i}`,
-          index: i,
-          total: sentences.length,
-          text: sentences[i],
-          audio: base64Audio,
-        });
-
-        for (const clientRes of clients) {
-          clientRes.write(`data: ${payload}\n\n`);
-        }
-
-        activeStreams.set(streamId, {
-          ...activeStreams.get(streamId),
-          index: i + 1,
-        });
-      } catch (err) {
-        console.error("TTS error:", err);
-      }
-    }
-
-    // STREAM DONE
-    for (const clientRes of clients) {
-      clientRes.write(`event: done\ndata: finished\n\n`);
-      clientRes.end();
-    }
-
-    activeStreams.delete(streamId);
-  })();
-});
-// SSE endpoint
-app.get("/stream/:id", (req, res) => {
-  const { id } = req.params;
-  const stream = activeStreams.get(id);
-
-  if (!stream) {
-    return res.status(404).send("Stream khatam ho gaya ya galat ID");
-  }
-
-  res.set({
-    "Content-Type": "text/event-stream",
-    "Cache-Control": "no-cache",
-    Connection: "keep-alive",
-  });
-  res.flushHeaders();
-
-  if (stream.clients.has(res)) {
-    console.log("Client already connected — ignoring duplicate");
-    res.end();
-    return;
-  }
-
-  stream.clients.add(res);
-
-  req.on("close", () => {
-    stream.clients.delete(res);
-    if (stream.clients.size === 0) {
-      activeStreams.delete(id);
-    }
-  });
-
-  if (stream.index > 0) {
-    res.write(`event: resume\ndata: ${stream.index}\n\n`);
-  }
-});
-
-function chunkWords(line, size = 10) {
-  const words = line.split(/\s+/);
-  const chunks = [];
-
-  for (let i = 0; i < words.length; i += size) {
-    chunks.push(words.slice(i, i + size).join(" "));
-  }
-
-  return chunks;
+// Voice model loader
+function getVoiceModel(v) {
+  return (
+    {
+      rohan: "hi_IN-rohan-medium.onnx",
+      priyamvada: "hi_IN-priyamvada-medium.onnx",
+      pratham: "hi_IN-pratham-medium.onnx",
+      ryan: "en_US-ryan-medium.onnx",
+      kristin: "en_US-kristin-medium.onnx",
+    }[v] || "hi_IN-rohan-medium.onnx"
+  );
 }
 
-app.post("/translate", async (req, res) => {
-  try {
-    const { text } = req.body;
-    if (!text?.trim()) {
-      return res.status(400).json({ error: "Text required" });
-    }
-
-    const lines = text.split("\n").filter(Boolean);
-    const finalOutput = [];
-
-    for (const line of lines) {
-      const chunks = chunkWords(line, 10);
-      let roughHindi = "";
-
-      for (const ch of chunks) {
-        const url1 = `https://inputtools.google.com/request?itc=hi-t-i0-und&text=${encodeURIComponent(
-          ch
-        )}`;
-        const r1 = await fetch(url1);
-        const d1 = await r1.json();
-
-        const part = d1?.[1]?.[0]?.[1]?.[0] || ch;
-        roughHindi += part + " ";
-      }
-
-      const url2 = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=hi&dt=t&q=${encodeURIComponent(
-        roughHindi.trim()
-      )}`;
-
-      const r2 = await fetch(url2);
-      const d2 = await r2.json();
-
-      const final = d2[0].map((t) => t[0]).join("");
-
-      finalOutput.push(final.trim());
-    }
-
-    res.json({
-      success: true,
-      original: text,
-      translated: finalOutput.join("\n"),
-    });
-  } catch (err) {
-    console.error("Translation error:", err);
-    res.status(500).json({ error: "Translation error" });
-  }
+// Create worker pool with more workers for faster parallel processing
+const pool = new WorkerPool(path.join(__dirname, "worker.js"), {
+  piperPath: PIPER_PATH,
+  tmpDir: TMP_DIR,
+  maxWorkers: 4, // Increase this if you have more CPU cores
 });
 
-app.post("/translate/english", async (req, res) => {
-  try {
-    let { text } = req.body;
+// Split text into sentences
+function splitIntoSentences(text) {
+  return text
+    .replace(/\n+/g, " ")
+    .split(/(?<=[।.!?])/u)
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
 
-    if (!text?.trim()) {
-      return res.status(400).json({ error: "Text required" });
+// Parse WAV header and extract audio data
+function parseWavBuffer(buffer) {
+  const header = {
+    audioFormat: buffer.readUInt16LE(20),
+    numChannels: buffer.readUInt16LE(22),
+    sampleRate: buffer.readUInt32LE(24),
+    byteRate: buffer.readUInt32LE(28),
+    blockAlign: buffer.readUInt16LE(32),
+    bitsPerSample: buffer.readUInt16LE(34),
+  };
+
+  // Find the data chunk
+  let dataOffset = 36;
+  while (dataOffset < buffer.length - 8) {
+    const chunkId = buffer.toString("ascii", dataOffset, dataOffset + 4);
+    if (chunkId === "data") {
+      break;
     }
-
-    const lines = text.split("\n").filter(Boolean);
-    const finalOutput = [];
-
-    for (const line of lines) {
-      const chunks = chunkWords(line, 10);
-      let hindiLine = "";
-
-      for (const ch of chunks) {
-        const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=hi&dt=t&q=${encodeURIComponent(
-          ch
-        )}`;
-
-        const r = await fetch(url);
-        const d = await r.json();
-
-        const part = d[0].map((t) => t[0]).join("");
-        hindiLine += part + " ";
-      }
-
-      finalOutput.push(hindiLine.trim());
-    }
-
-    res.json({
-      success: true,
-      source: "english",
-      original: text,
-      translated: finalOutput.join("\n"),
-    });
-  } catch (err) {
-    console.error("English Translation error:", err);
-    res.status(500).json({ error: "Translation error" });
+    const chunkSize = buffer.readUInt32LE(dataOffset + 4);
+    dataOffset += 8 + chunkSize;
   }
+
+  const dataSize = buffer.readUInt32LE(dataOffset + 4);
+  const audioData = buffer.slice(dataOffset + 8, dataOffset + 8 + dataSize);
+
+  return { header, audioData, headerSize: dataOffset + 8 };
+}
+
+// Create WAV header
+function createWavHeader(dataSize, sampleRate, numChannels, bitsPerSample) {
+  const header = Buffer.alloc(44);
+
+  header.write("RIFF", 0);
+  header.writeUInt32LE(36 + dataSize, 4);
+  header.write("WAVE", 8);
+
+  header.write("fmt ", 12);
+  header.writeUInt32LE(16, 16);
+  header.writeUInt16LE(1, 20);
+  header.writeUInt16LE(numChannels, 22);
+  header.writeUInt32LE(sampleRate, 24);
+  header.writeUInt32LE(sampleRate * numChannels * (bitsPerSample / 8), 28);
+  header.writeUInt16LE(numChannels * (bitsPerSample / 8), 32);
+  header.writeUInt16LE(bitsPerSample, 34);
+
+  header.write("data", 36);
+  header.writeUInt32LE(dataSize, 40);
+
+  return header;
+}
+
+// Merge multiple WAV buffers properly
+function mergeWavBuffers(buffers) {
+  if (buffers.length === 0) return null;
+  if (buffers.length === 1) return buffers[0];
+
+  const firstWav = parseWavBuffer(buffers[0]);
+  const { header } = firstWav;
+
+  const audioDataChunks = buffers.map((buf) => parseWavBuffer(buf).audioData);
+  const mergedAudioData = Buffer.concat(audioDataChunks);
+
+  const newHeader = createWavHeader(
+    mergedAudioData.length,
+    header.sampleRate,
+    header.numChannels,
+    header.bitsPerSample,
+  );
+
+  return Buffer.concat([newHeader, mergedAudioData]);
+}
+
+// Process in batches for better performance
+async function processBatches(sentences, modelPath, batchSize = 10) {
+  const results = [];
+
+  for (let i = 0; i < sentences.length; i += batchSize) {
+    const batch = sentences.slice(i, i + batchSize);
+    console.log(
+      `Processing batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(sentences.length / batchSize)}`,
+    );
+
+    const batchResults = await Promise.all(
+      batch.map((s) => pool.runTask({ text: s, modelPath })),
+    );
+
+    results.push(...batchResults);
+  }
+
+  return results;
+}
+
+// ------------------------------------------------------
+//  FAST STREAMING ENDPOINT  (SSE + Parallel Workers)
+// ------------------------------------------------------
+app.post("/tts/stream", async (req, res) => {
+  const { text, voice } = req.body;
+
+  if (!text || !text.trim()) {
+    return res.status(400).json({ error: "Text missing" });
+  }
+
+  const model = getVoiceModel(voice);
+  const modelPath = path.join(__dirname, "piper", model);
+
+  const sentences = splitIntoSentences(text);
+
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+
+  let nextIndexToSend = 0;
+  const buffer = {};
+
+  const promises = sentences.map((sentence, idx) =>
+    pool.runTask({ text: sentence, modelPath }).then((data) => ({
+      idx,
+      sentence,
+      data,
+    })),
+  );
+
+  promises.forEach((p) =>
+    p.then(({ idx, sentence, data }) => {
+      buffer[idx] = { sentence, data };
+
+      while (buffer[nextIndexToSend]) {
+        const item = buffer[nextIndexToSend];
+
+        if (!item.data.ok) {
+          res.write(
+            `data: ${JSON.stringify({
+              chunk: nextIndexToSend,
+              error: item.data.error,
+            })}\n\n`,
+          );
+        } else {
+          res.write(
+            `data: ${JSON.stringify({
+              chunk: nextIndexToSend,
+              total: sentences.length,
+              audio: item.data.base64,
+              sentence: item.sentence,
+            })}\n\n`,
+          );
+        }
+
+        delete buffer[nextIndexToSend];
+        nextIndexToSend++;
+      }
+    }),
+  );
+
+  Promise.all(promises).then(() => {
+    res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
+    res.end();
+  });
 });
+
 
 app.listen(4000, () => {
-  console.log("server is running on: http://localhost:4000");
+  console.log("🚀 FAST TTS (CommonJS) running at http://localhost:4000");
 });
