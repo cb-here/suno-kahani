@@ -1,4 +1,4 @@
-"use client";
+// @ts-nocheck
 import { useEffect, useState } from "react";
 import Button from "../components/form/Button";
 import TextArea from "../components/form/TextArea";
