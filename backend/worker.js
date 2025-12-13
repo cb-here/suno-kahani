@@ -8,7 +8,7 @@ function runPiper(text, modelPath, tmpDir) {
   return new Promise((resolve, reject) => {
     const outFile = path.join(
       tmpDir,
-      `piper_${Date.now()}_${Math.random().toString(36).slice(2)}.wav`
+      `piper_${Date.now()}_${Math.random().toString(36).slice(2)}.wav`,
     );
 
     const child = spawn(workerData.piperPath, [
@@ -18,12 +18,11 @@ function runPiper(text, modelPath, tmpDir) {
       outFile,
       "--speaker",
       "0",
-      "--length_scale",
-      "1",
+      "--length_scale", "1.1",
       "--noise_scale",
-      "0.5",
+      "0.667",
       "--noise_w",
-      "0.6",
+      "0.8",
     ]);
 
     let stderr = "";
@@ -34,7 +33,9 @@ function runPiper(text, modelPath, tmpDir) {
 
     child.on("close", (code) => {
       if (code !== 0) {
-        try { fs.unlinkSync(outFile); } catch {}
+        try {
+          fs.unlinkSync(outFile);
+        } catch {}
         return reject(`Piper failed: ${stderr}`);
       }
       try {
