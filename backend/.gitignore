@@ -12,6 +12,7 @@ dist
 dist-ssr
 *.local
 .env
+piper
 
 # Editor directories and files
 .vscode/*
