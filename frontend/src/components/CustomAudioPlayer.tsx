@@ -19,7 +19,7 @@ export default function CustomAudioPlayer({ chunks }: any) {
   const [waveHeights, setWaveHeights] = useState<number[]>(
     Array.from({ length: 30 }, (_, i) => 20 + Math.sin(i * 0.5) * 10),
   );
-  const [fileName, setFileName] = useState("suno-kahani");
+  const [fileName, setFileName] = useState("01");
 
   const startPlayback = () => {
     if (!chunks.length) return;
@@ -236,7 +236,7 @@ export default function CustomAudioPlayer({ chunks }: any) {
       const url = URL.createObjectURL(combinedBlob);
       const link = document.createElement("a");
       link.href = url;
-      link.download = `${fileName}-${Date.now()}.wav`;
+      link.download = `${fileName}.wav`;
 
       // Trigger download
       document.body.appendChild(link);
