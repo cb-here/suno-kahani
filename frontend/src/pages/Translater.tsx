@@ -75,7 +75,15 @@ export default function Translater() {
         {/* Widget Dropdown */}
         <div
           id="google_translate_element"
-          className="border border-gray-300 dark:border-gray-700 rounded-md p-2 sm:p-3 bg-gray-50 dark:bg-gray-700"
+          className=" rounded-xl
+             border border-gray-200/70 dark:border-gray-700/60
+             bg-white/70 dark:bg-gray-900/60
+             backdrop-blur-md
+             px-4 py-2.5
+             shadow-sm
+             transition-all duration-200
+             hover:shadow-md
+             hover:border-gray-300 dark:hover:border-gray-600"
         ></div>
 
         <TextArea
@@ -83,7 +91,7 @@ export default function Translater() {
           value={text}
           rows={8}
           onChange={(e) => setText(e.target.value)}
-          className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-gray-200 p-3 sm:p-4 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
+          className="resize-auto w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-gray-200 p-3 sm:p-4 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
         />
 
         <Button

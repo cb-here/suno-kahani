@@ -95,7 +95,8 @@ export default function Home() {
                 const blob = new Blob([arr], { type: "audio/wav" });
                 const url = URL.createObjectURL(blob);
 
-                audioChunks.push(url);
+                // Store both the URL for playback and raw data for download
+                audioChunks.push({ url, data: arr });
                 setChunks([...audioChunks]);
               }
             } catch (parseErr) {

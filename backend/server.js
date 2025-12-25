@@ -12,8 +12,12 @@ app.use(express.json({ limit: "100mb" }));
 
 console.log("Using __dirname:", __dirname);
 
-// Paths
-const PIPER_PATH = path.join(__dirname, "piper", "piper.exe");
+// Paths - use environment variable or detect platform
+const PIPER_PATH = process.env.PIPER_PATH || path.join(
+  __dirname,
+  "piper",
+  process.platform === "win32" ? "piper.exe" : "piper"
+);
 const TMP_DIR = path.join(__dirname, "tmp");
 if (!fs.existsSync(TMP_DIR)) fs.mkdirSync(TMP_DIR);
 
