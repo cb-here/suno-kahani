@@ -24,3 +24,4 @@ piper
 *.njsproj
 *.sln
 *.sw?
+temp
